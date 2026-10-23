@@ -53,6 +53,19 @@ def test_overlayPointsTranslationOnly(points1, points2, expectedTranslate2, expe
     assert np.allclose(center1, expectedCenter1)
 
 
+def test_overlayPointsTwoPoints():
+    """Test that with two points, _overlayPoints maps each one exactly onto its partner with a proper rotation."""
+    points2 = [Vec3(0, 0, 0), Vec3(1, 2, 2)]
+    known = _rotation((1, 2, 3), 0.7)
+    offset = np.array([0.5, -1, 2])
+    points1 = [Vec3(*(known @ p + offset)) for p in points2]
+    (translate2, rotate, center1) = _overlayPoints(points1, points2)
+    assert np.allclose(rotate.T @ rotate, np.identity(3))
+    assert np.isclose(np.linalg.det(rotate), 1)
+    for target, point in zip(points1, points2):
+        assert np.allclose(rotate @ (point + translate2) + center1, target)
+
+
 def _load1BHL():
     """Load the 1BHL test structure."""
     return pdbfixer.PDBFixer(filename=(Path(__file__).parent / "data" / "1BHL.pdb").as_posix())

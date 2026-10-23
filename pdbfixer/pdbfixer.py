@@ -238,18 +238,14 @@ def _overlayPoints(points1, points2):
 
     # Compute centroids.
 
-    center1 = unit.sum(points1)/float(len(points1))
-    center2 = unit.sum(points2)/float(len(points2))
+    p1 = np.array(points1)
+    p2 = np.array(points2)
+    center1 = p1.mean(axis=0)
+    center2 = p2.mean(axis=0)
 
-    # Compute R matrix.
+    # Compute the correlation matrix R of the centered points.
 
-    R = np.zeros((3, 3))
-    for p1, p2 in zip(points1, points2):
-        x = p1-center1
-        y = p2-center2
-        for i in range(3):
-            for j in range(3):
-                R[i][j] += y[i]*x[j]
+    R = (p2-center2).T @ (p1-center1)
 
     # Use an SVD to compute the rotation matrix.  If the best fit is a reflection, flip the
     # direction with the smallest singular value (the last one) so the result is a proper
@@ -257,9 +253,9 @@ def _overlayPoints(points1, points2):
 
     (u, _, vh) = lin.svd(R)
     d = np.sign(lin.det(u)*lin.det(vh))
-    rotate = np.dot(np.dot(u, np.diag([1, 1, d])), vh).transpose()
+    rotate = (u @ np.diag([1, 1, d]) @ vh).T
 
-    return (-center2, rotate, center1)
+    return (-mm.Vec3(*center2), rotate, mm.Vec3(*center1))
 
 def _dihedralRotation(points, angle):
     """Given four points that form a dihedral, compute the matrix that rotates the last point around the axis to
