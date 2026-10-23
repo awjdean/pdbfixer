@@ -652,10 +652,13 @@ class PDBFixer(object):
 
                     template = self._getTemplate(residue.name)
                     atomPositions = dict((atom.name, self.positions[atom.index]) for atom in residue.atoms())
+                    # Backbone oxygens depend on psi and can tilt the fit enough to put a
+                    # missing side chain on the wrong side of the N-CA-C plane.
+                    skip = ('O', 'OXT') if all(name in atomPositions for name in ('N', 'CA', 'C')) else ()
                     points1 = []
                     points2 = []
                     for atom in template.topology.atoms():
-                        if atom.name in atomPositions:
+                        if atom.name in atomPositions and atom.name not in skip:
                             points1.append(atomPositions[atom.name].value_in_unit(unit.nanometer))
                             points2.append(template.positions[atom.index].value_in_unit(unit.nanometer))
 

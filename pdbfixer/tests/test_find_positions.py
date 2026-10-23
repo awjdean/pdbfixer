@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 from openmm import Vec3, app, unit
 
 import pdbfixer
@@ -28,12 +29,12 @@ def _oxtPositions(fixer):
     return [pos for pos, atom in zip(fixer.positions, fixer.topology.atoms()) if atom.name == "OXT"]
 
 
-def _alanineHandedness(fixer):
-    """Return the handedness (+1 or -1) of every alanine's alpha carbon, in residue order."""
+def _residueHandedness(fixer, shouldInclude):
+    """Return the handedness (+1 or -1) of the selected alpha carbons, in residue order."""
     positions = fixer.positions.value_in_unit(unit.nanometer)
     handedness = []
     for residue in fixer.topology.residues():
-        if residue.name == "ALA":
+        if shouldInclude(residue):
             pos = {atom.name: positions[atom.index] for atom in residue.atoms()}
             toN = pos["N"]-pos["CA"]
             toC = pos["C"]-pos["CA"]
@@ -70,11 +71,29 @@ def test_addedCBChirality():
 
     # Record the handedness of every alanine, then delete its CB and have PDBFixer add it back.
 
-    originalHandedness = _alanineHandedness(fixer)
+    originalHandedness = _residueHandedness(fixer, lambda residue: residue.name == "ALA")
     assert len(originalHandedness) > 0
     _deleteAndRebuild(fixer, lambda atom: atom.residue.name == "ALA" and atom.name == "CB")
 
     # Make sure none of them was built as its mirror image.  Adding atoms keeps the residues
     # in the same order, so the lists can be compared directly.
 
-    assert _alanineHandedness(fixer) == originalHandedness
+    assert _residueHandedness(fixer, lambda residue: residue.name == "ALA") == originalHandedness
+
+
+@pytest.mark.parametrize("residueId", ["57", "72", "112"])
+def test_addedSideChainChirality(residueId):
+    """Test that the backbone oxygen does not put a rebuilt side chain on the wrong side."""
+    fixer = _load1BHL()
+
+    def isSelected(residue):
+        return residue.chain.id == "A" and residue.id == residueId
+
+    # SER57, VAL72, and THR112 have backbone oxygen positions that tilt the template
+    # fit enough to put CB on the wrong side, even when the fit is a proper rotation.
+
+    originalHandedness = _residueHandedness(fixer, isSelected)
+    assert len(originalHandedness) == 1
+    _deleteAndRebuild(fixer, lambda atom: isSelected(atom.residue) and atom.name not in ("N", "CA", "C", "O", "OXT"))
+
+    assert _residueHandedness(fixer, isSelected) == originalHandedness
