@@ -37,6 +37,22 @@ def test_overlayPointsRecoversRotation(mirror):
     assert np.allclose(center1, offset)
 
 
+@pytest.mark.parametrize(
+    "points1,points2,expectedTranslate2,expectedCenter1",
+    [
+        ([], [], (0, 0, 0), (0, 0, 0)),
+        ([Vec3(1, 2, 3)], [Vec3(4, 5, 6)], (-4, -5, -6), (1, 2, 3)),
+    ],
+    ids=["none", "single"],
+)
+def test_overlayPointsTranslationOnly(points1, points2, expectedTranslate2, expectedCenter1):
+    """Test that with fewer than two points, _overlayPoints returns a pure translation in the documented order."""
+    (translate2, rotate, center1) = _overlayPoints(points1, points2)
+    assert np.array_equal(rotate, np.identity(3))
+    assert np.allclose(translate2, expectedTranslate2)
+    assert np.allclose(center1, expectedCenter1)
+
+
 def _load1BHL():
     """Load the 1BHL test structure."""
     return pdbfixer.PDBFixer(filename=(Path(__file__).parent / "data" / "1BHL.pdb").as_posix())

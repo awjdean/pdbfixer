@@ -216,8 +216,8 @@ def _overlayPoints(points1, points2):
 
     Parameters
     ----------
-    points1 (numpy array of openmm.unit.Quantity with units compatible with distance) - reference set of coordinates
-    points2 (numpy array of openmm.unit.Quantity with units compatible with distance) - set of coordinates to be rotated
+    points1 (list of Vec3, in nm) - reference set of coordinates
+    points2 (list of Vec3, in nm) - set of coordinates to be rotated, in the same order as points1
 
     Returns
     -------
@@ -234,7 +234,7 @@ def _overlayPoints(points1, points2):
     if len(points1) == 0:
         return (mm.Vec3(0, 0, 0), np.identity(3), mm.Vec3(0, 0, 0))
     if len(points1) == 1:
-        return (points1[0], np.identity(3), -1*points2[0])
+        return (-points2[0], np.identity(3), points1[0])
 
     # Compute centroids.
 
