@@ -76,14 +76,18 @@ def test_findOXTPosition():
     """Test that OXT is added at the correct position."""
     fixer = _load1BHL()
 
-    # Record the original position of OXT, then delete it and have PDBFixer add it back.
+    # Record the original positions of the OXT atoms, then delete them and have PDBFixer add them back.
 
-    originalPos = _oxtPositions(fixer)
+    originalPositions = _oxtPositions(fixer)
+    assert len(originalPositions) > 0
     _deleteAndRebuild(fixer, lambda atom: atom.name == "OXT")
 
-    # Make sure it is sufficiently close to the original position.
+    # Make sure each one is sufficiently close to its original position.
 
-    assert unit.norm(_oxtPositions(fixer)[0] - originalPos[0]) < 0.01 * unit.nanometer
+    newPositions = _oxtPositions(fixer)
+    assert len(newPositions) == len(originalPositions)
+    for newPos, originalPos in zip(newPositions, originalPositions):
+        assert unit.norm(newPos - originalPos) < 0.01 * unit.nanometer
 
 
 def test_addedCBChirality():
