@@ -22,7 +22,7 @@ def test_overlayPointsRecoversRotation(mirror):
     # The slab is centered, has principal axes x, y and z, and is thinnest along z, so the best proper rotation
     # from it onto itself, or onto its mirror image through the xy plane, is the identity.  Tilting the slab and
     # rotating its image by a known rotation makes that rotation the exact answer in both cases.  Moving the slab
-    # by shift and its image by offset makes -shift and offset the exact translations.
+    # by shift and its image by offset makes offset - known @ shift the exact translation.
 
     slab = [(1, 0, 0.1), (-1, 0, 0.1), (0, 2, -0.1), (0, -2, -0.1)]
     tilt = _rotation((1, -2, 0.5), 0.9)
@@ -31,26 +31,24 @@ def test_overlayPointsRecoversRotation(mirror):
     offset = np.array([0.5, -1, 2])
     points2 = [Vec3(*(tilt @ p + shift)) for p in slab]
     points1 = [Vec3(*(known @ tilt @ mirror @ p + offset)) for p in slab]
-    (translate2, rotate, center1) = _overlayPoints(points1, points2)
+    (rotate, translate) = _overlayPoints(points1, points2)
     assert np.allclose(rotate, known)
-    assert np.allclose(translate2, -shift)
-    assert np.allclose(center1, offset)
+    assert np.allclose(translate, offset - known @ shift)
 
 
 @pytest.mark.parametrize(
-    "points1,points2,expectedTranslate2,expectedCenter1",
+    "points1,points2,expected",
     [
-        ([], [], (0, 0, 0), (0, 0, 0)),
-        ([Vec3(1, 2, 3)], [Vec3(4, 5, 6)], (-4, -5, -6), (1, 2, 3)),
+        ([], [], (0, 0, 0)),
+        ([Vec3(1, 2, 3)], [Vec3(4, 5, 6)], (-3, -3, -3)),
     ],
     ids=["none", "single"],
 )
-def test_overlayPointsTranslationOnly(points1, points2, expectedTranslate2, expectedCenter1):
-    """Test that with fewer than two points, _overlayPoints returns a pure translation in the documented order."""
-    (translate2, rotate, center1) = _overlayPoints(points1, points2)
+def test_overlayPointsTranslationOnly(points1, points2, expected):
+    """Test that with fewer than two points, _overlayPoints returns a pure translation."""
+    (rotate, translate) = _overlayPoints(points1, points2)
     assert np.array_equal(rotate, np.identity(3))
-    assert np.allclose(translate2, expectedTranslate2)
-    assert np.allclose(center1, expectedCenter1)
+    assert np.allclose(translate, expected)
 
 
 def test_overlayPointsTwoPoints():
@@ -59,11 +57,11 @@ def test_overlayPointsTwoPoints():
     known = _rotation((1, 2, 3), 0.7)
     offset = np.array([0.5, -1, 2])
     points1 = [Vec3(*(known @ p + offset)) for p in points2]
-    (translate2, rotate, center1) = _overlayPoints(points1, points2)
+    (rotate, translate) = _overlayPoints(points1, points2)
     assert np.allclose(rotate.T @ rotate, np.identity(3))
     assert np.isclose(np.linalg.det(rotate), 1)
     for target, point in zip(points1, points2):
-        assert np.allclose(rotate @ (point + translate2) + center1, target)
+        assert np.allclose(rotate @ point + translate, target)
 
 
 def _load1BHL():

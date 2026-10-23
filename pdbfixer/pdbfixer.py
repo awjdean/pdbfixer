@@ -212,7 +212,7 @@ def _guessFileFormat(file, filename):
     return 'pdb'
 
 def _overlayPoints(points1, points2):
-    """Given two sets of points, determine the translation and rotation that matches them as closely as possible.
+    """Find the rotation and translation for which rotate @ points2[i] + translate best fits points1[i].
 
     Parameters
     ----------
@@ -221,9 +221,8 @@ def _overlayPoints(points1, points2):
 
     Returns
     -------
-    translate2 - vector to translate points2 by in order to center it
-    rotate - proper rotation matrix (det = +1) to apply to centered points2 to map it onto points1
-    center1 - center of points1
+    rotate (3x3 numpy array) - proper rotation matrix (det = +1)
+    translate (length-3 numpy array, in nm) - translation to apply after the rotation
 
     Notes
     -----
@@ -232,9 +231,7 @@ def _overlayPoints(points1, points2):
     """
 
     if len(points1) == 0:
-        return (mm.Vec3(0, 0, 0), np.identity(3), mm.Vec3(0, 0, 0))
-    if len(points1) == 1:
-        return (-points2[0], np.identity(3), points1[0])
+        return (np.identity(3), np.zeros(3))
 
     # Compute centroids.
 
@@ -243,19 +240,24 @@ def _overlayPoints(points1, points2):
     center1 = p1.mean(axis=0)
     center2 = p2.mean(axis=0)
 
-    # Compute the correlation matrix R of the centered points.
+    # A single point only determines the translation.
 
-    R = (p2-center2).T @ (p1-center1)
+    rotate = np.identity(3)
+    if len(points1) > 1:
 
-    # Use an SVD to compute the rotation matrix.  If the best fit is a reflection, flip the
-    # direction with the smallest singular value (the last one) so the result is a proper
-    # rotation; otherwise nearly coplanar points can map a template onto its mirror image.
+        # Compute the correlation matrix R of the centered points.
 
-    (u, _, vh) = lin.svd(R)
-    d = np.sign(lin.det(u)*lin.det(vh))
-    rotate = (u @ np.diag([1, 1, d]) @ vh).T
+        R = (p2-center2).T @ (p1-center1)
 
-    return (-mm.Vec3(*center2), rotate, mm.Vec3(*center1))
+        # Use an SVD to compute the rotation matrix.  If the best fit is a reflection, flip the
+        # direction with the smallest singular value (the last one) so the result is a proper
+        # rotation; otherwise nearly coplanar points can map a template onto its mirror image.
+
+        (u, _, vh) = lin.svd(R)
+        d = np.sign(lin.det(u)*lin.det(vh))
+        rotate = (u @ np.diag([1, 1, d]) @ vh).T
+
+    return (rotate, center1 - rotate @ center2)
 
 def _dihedralRotation(points, angle):
     """Given four points that form a dihedral, compute the matrix that rotates the last point around the axis to
@@ -657,7 +659,7 @@ class PDBFixer(object):
 
                     # Compute the optimal transform to overlay them.
 
-                    (translate2, rotate, translate1) = _overlayPoints(points1, points2)
+                    (rotate, translate) = _overlayPoints(points1, points2)
 
                     # Add the missing atoms.
 
@@ -667,7 +669,7 @@ class PDBFixer(object):
                         newAtoms.append(newAtom)
                         addedAtomMap[residue][atom] = newAtom
                         templatePosition = template.positions[atom.index].value_in_unit(unit.nanometer)
-                        newPositions.append((mm.Vec3(*np.dot(rotate, templatePosition+translate2))+translate1)*unit.nanometer)
+                        newPositions.append(mm.Vec3(*(rotate @ templatePosition + translate))*unit.nanometer)
 
                     if residue.name not in app.Topology._standardBonds:
 
@@ -766,7 +768,7 @@ class PDBFixer(object):
         for i, residueName in enumerate(residueNames):
             template = self._getTemplate(residueName)
 
-            # Find a translation that best matches the adjacent residue.
+            # Find a rotation that best matches the adjacent residue.
 
             points1 = []
             points2 = []
@@ -774,7 +776,7 @@ class PDBFixer(object):
                 if atom.name in orientToPositions:
                     points1.append(orientToPositions[atom.name].value_in_unit(unit.nanometer))
                     points2.append(template.positions[atom.index].value_in_unit(unit.nanometer))
-            (translate2, rotate, translate1) = _overlayPoints(points1, points2)
+            (rotate, _) = _overlayPoints(points1, points2)
 
             # Create the new residue.
 
@@ -788,7 +790,7 @@ class PDBFixer(object):
                 newAtom = chain.topology.addAtom(atom.name, atom.element, newResidue)
                 newAtoms.append(newAtom)
                 templatePosition = template.positions[atom.index].value_in_unit(unit.nanometer)
-                newPositions.append(mm.Vec3(*np.dot(rotate, templatePosition))*unit.nanometer+translate)
+                newPositions.append(mm.Vec3(*(rotate @ templatePosition))*unit.nanometer+translate)
             if prevResidue is not None:
                 atoms1 = {atom.name: atom for atom in prevResidue.atoms()}
                 atoms2 = {atom.name: atom for atom in newResidue.atoms()}
