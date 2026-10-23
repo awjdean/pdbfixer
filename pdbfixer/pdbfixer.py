@@ -227,7 +227,7 @@ def _overlayPoints(points1, points2):
 
     Notes
     -----
-    This is based on W. Kabsch, Acta Cryst., A34, pp. 828-829 (1978).
+    This is based on W. Kabsch, Acta Cryst., A32, pp. 922-923 (1976) and A34, pp. 827-828 (1978).
 
     """
 
