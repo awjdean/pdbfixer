@@ -37,6 +37,27 @@ def test_overlayPointsRecoversRotation(mirror):
     assert np.allclose(center1, offset)
 
 
+def _load1BHL():
+    """Load the 1BHL test structure."""
+    return pdbfixer.PDBFixer(filename=(Path(__file__).parent / "data" / "1BHL.pdb").as_posix())
+
+
+def _deleteAndRebuild(fixer, shouldDelete):
+    """Delete the atoms selected by shouldDelete, then have PDBFixer add them back without building missing residues."""
+    modeller = app.Modeller(fixer.topology, fixer.positions)
+    modeller.delete([atom for atom in modeller.topology.atoms() if shouldDelete(atom)])
+    fixer.topology = modeller.topology
+    fixer.positions = modeller.positions
+    fixer.missingResidues = {}
+    fixer.findMissingAtoms()
+    fixer.addMissingAtoms()
+
+
+def _oxtPositions(fixer):
+    """Return the positions of all OXT atoms."""
+    return [pos for pos, atom in zip(fixer.positions, fixer.topology.atoms()) if atom.name == "OXT"]
+
+
 def _alanineHandedness(fixer):
     """Return the handedness (+1 or -1) of every alanine's alpha carbon, in residue order."""
     positions = fixer.positions.value_in_unit(unit.nanometer)
@@ -53,42 +74,29 @@ def _alanineHandedness(fixer):
 
 def test_findOXTPosition():
     """Test that OXT is added at the correct position."""
-    fixer = pdbfixer.PDBFixer(filename=(Path(__file__).parent / "data" / "1BHL.pdb").as_posix())
+    fixer = _load1BHL()
 
-    # Record the original position of OXT, then delete it.
+    # Record the original position of OXT, then delete it and have PDBFixer add it back.
 
-    originalPos = [pos for pos, atom in zip(fixer.positions, fixer.topology.atoms()) if atom.name == "OXT"]
-    modeller = app.Modeller(fixer.topology, fixer.positions)
-    modeller.delete([atom for atom in modeller.topology.atoms() if atom.name == "OXT"])
-    fixer.topology = modeller.topology
-    fixer.positions = modeller.positions
+    originalPos = _oxtPositions(fixer)
+    _deleteAndRebuild(fixer, lambda atom: atom.name == "OXT")
 
-    # Have PDBFixer add it back and make sure it is sufficiently close to the original position.
+    # Make sure it is sufficiently close to the original position.
 
-    fixer.missingResidues = {}
-    fixer.findMissingAtoms()
-    fixer.addMissingAtoms()
-    newPos = [pos for pos, atom in zip(fixer.positions, fixer.topology.atoms()) if atom.name == "OXT"]
-    assert unit.norm(newPos[0] - originalPos[0]) < 0.01 * unit.nanometer
+    assert unit.norm(_oxtPositions(fixer)[0] - originalPos[0]) < 0.01 * unit.nanometer
 
 
 def test_addedCBChirality():
     """Test that missing CB atoms are added with the correct chirality."""
-    fixer = pdbfixer.PDBFixer(filename=(Path(__file__).parent / "data" / "1BHL.pdb").as_posix())
+    fixer = _load1BHL()
 
-    # Record the handedness of every alanine, then delete its CB.
+    # Record the handedness of every alanine, then delete its CB and have PDBFixer add it back.
 
     originalHandedness = _alanineHandedness(fixer)
     assert len(originalHandedness) > 0
-    modeller = app.Modeller(fixer.topology, fixer.positions)
-    modeller.delete([atom for atom in modeller.topology.atoms() if atom.residue.name == "ALA" and atom.name == "CB"])
-    fixer.topology = modeller.topology
-    fixer.positions = modeller.positions
+    _deleteAndRebuild(fixer, lambda atom: atom.residue.name == "ALA" and atom.name == "CB")
 
-    # Have PDBFixer add them back and make sure none of them was built as its mirror image.
-    # Adding atoms keeps the residues in the same order, so the lists can be compared directly.
+    # Make sure none of them was built as its mirror image.  Adding atoms keeps the residues
+    # in the same order, so the lists can be compared directly.
 
-    fixer.missingResidues = {}
-    fixer.findMissingAtoms()
-    fixer.addMissingAtoms()
     assert _alanineHandedness(fixer) == originalHandedness
